@@ -1,0 +1,35 @@
+services:
+  frontend:
+    build:
+      context: ./apps/web
+      dockerfile: dockerfile
+    container_name: claudable_frontend
+    ports:
+      - "3000:3000"
+    # 掛原始碼方便開發，但不要把 host node_modules 掛進來
+    volumes:
+      - ./apps/web:/app/web:delegated
+      # 讓 node_modules 由容器內的名為 volume 管理，避免和宿主 pnpm store/符號連結衝突
+      - web_node_modules:/app/web/node_modules
+    environment:
+      # 注意：browser 端要能解析，開發時通常設定為 localhost:8080
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: ./apps/api
+      dockerfile: dockerfile
+    container_name: claudable_backend
+    ports:
+      - "8080:8080"
+    # 掛原始碼方便開發（可視情況保留/移除）
+    volumes:
+      - ./apps/api:/app/api
+      - ./data:/app/api/data
+    environment:
+      - PORT=8080
+
+volumes:
+  web_node_modules:

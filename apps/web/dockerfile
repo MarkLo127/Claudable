@@ -1,0 +1,19 @@
+# apps/web/dockerfile
+FROM node:18-alpine
+
+WORKDIR /app/web
+
+# 安裝 pnpm（全域）
+RUN npm install -g pnpm
+
+# 複製 package.json + lockfile（先安裝依賴以利快取）
+COPY package.json pnpm-lock.yaml* ./
+
+# 建議使用 frozen-lockfile 避免版本漂移
+RUN pnpm install --frozen-lockfile
+
+# 複製其餘程式碼
+COPY . .
+
+# 如果你是在容器內做 dev (next dev)，用這個
+CMD ["pnpm", "dev"]
