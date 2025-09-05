@@ -1,6 +1,6 @@
 # Claudable
 
-<img src="./assets/Claudable_main.png" alt="CLovable" style="border-radius: 12px; width: 100%;" />
+<img src="./assets/Claudable.png" alt="CLovable" style="border-radius: 12px; width: 100%;" />
 <div align="center">
 <h3>Connect Claude Code. Build what you want. Deploy instantly.</h3>
 
