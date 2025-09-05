@@ -2,34 +2,47 @@ services:
   frontend:
     build:
       context: ./apps/web
-      dockerfile: dockerfile
     container_name: claudable_frontend
     ports:
-      - "3000:3000"
-    # 掛原始碼方便開發，但不要把 host node_modules 掛進來
+      - "5090:3000"
     volumes:
-      - ./apps/web:/app/web:delegated
-      # 讓 node_modules 由容器內的名為 volume 管理，避免和宿主 pnpm store/符號連結衝突
+      - claude_data:/root/.claude
+      - codex_data:/root/.codex
+      - qwen_data:/root/.qwen
+      - gemini_data:/root/.config/gemini
+      - cursor_agent_data:/root/.local/share/cursor-agent
+      - openai_data:/root/.config/openai
       - web_node_modules:/app/web/node_modules
+      - ./apps/web:/app/web:delegated
     environment:
-      # 注意：browser 端要能解析，開發時通常設定為 localhost:8080
-      - NEXT_PUBLIC_API_URL=http://localhost:8080
+      - NEXT_PUBLIC_API_URL=http://backend:8080
     depends_on:
       - backend
 
   backend:
     build:
       context: ./apps/api
-      dockerfile: dockerfile
     container_name: claudable_backend
     ports:
-      - "8080:8080"
-    # 掛原始碼方便開發（可視情況保留/移除）
+      - "4090:8080"
     volumes:
       - ./apps/api:/app/api
       - ./data:/app/api/data
+      - claude_data:/root/.claude
+      - codex_data:/root/.codex
+      - qwen_data:/root/.qwen
+      - gemini_data:/root/.config/gemini
+      - cursor_agent_data:/root/.local/share/cursor-agent
+      - openai_data:/root/.config/openai
     environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - PORT=8080
 
 volumes:
   web_node_modules:
+  claude_data:
+  codex_data:
+  qwen_data:
+  gemini_data:
+  cursor_agent_data:
+  openai_data:

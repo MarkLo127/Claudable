@@ -1,19 +1,40 @@
 # apps/web/dockerfile
-FROM node:18-alpine
+FROM node:20-bullseye
 
 WORKDIR /app/web
 
-# 安裝 pnpm（全域）
-RUN npm install -g pnpm
+# 安裝必要系統工具和依賴（確保 cursor-agent 可運行）
+RUN apt-get update && apt-get install -y \
+    curl bash git unzip xz-utils libc6 libstdc++6 \
+ && rm -rf /var/lib/apt/lists/*
 
-# 複製 package.json + lockfile（先安裝依賴以利快取）
+# 設定 pnpm 全域目錄
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PNPM_HOME/bin:/root/.local/bin:$PATH
+ENV SHELL=/bin/bash
+
+# 建立 pnpm 目錄並安裝 pnpm
+RUN mkdir -p $PNPM_HOME \
+ && npm install -g pnpm \
+ && pnpm setup \
+ && pnpm config set global-bin-dir $PNPM_HOME \
+ && pnpm config set store-dir /app/web/.pnpm-store
+
+# 安裝 Node CLI agent
+RUN pnpm add -g @anthropic-ai/claude-code \
+                 @qwen-code/qwen-code@latest \
+                 @google/gemini-cli \
+                 @openai/codex
+
+# 安裝 cursor-agent 官方腳本
+RUN curl https://cursor.com/install -fsS | bash
+
+# 複製專案依賴並安裝
 COPY package.json pnpm-lock.yaml* ./
-
-# 建議使用 frozen-lockfile 避免版本漂移
 RUN pnpm install --frozen-lockfile
 
-# 複製其餘程式碼
+# 複製專案程式碼
 COPY . .
 
-# 如果你是在容器內做 dev (next dev)，用這個
+# 前端啟動
 CMD ["pnpm", "dev"]
