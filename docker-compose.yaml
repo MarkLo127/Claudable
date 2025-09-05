@@ -1,21 +1,14 @@
+version: "3.9"
+
 services:
   frontend:
     build:
       context: ./apps/web
     container_name: claudable_frontend
     ports:
-      - "5090:3000"
-    volumes:
-      - claude_data:/root/.claude
-      - codex_data:/root/.codex
-      - qwen_data:/root/.qwen
-      - gemini_data:/root/.config/gemini
-      - cursor_agent_data:/root/.local/share/cursor-agent
-      - openai_data:/root/.config/openai
-      - web_node_modules:/app/web/node_modules
-      - ./apps/web:/app/web:delegated
+      - "5090:3000" # 前端改 5090
     environment:
-      - NEXT_PUBLIC_API_URL=http://backend:8080
+      - NEXT_PUBLIC_API_URL=http://backend:4090
     depends_on:
       - backend
 
@@ -24,25 +17,21 @@ services:
       context: ./apps/api
     container_name: claudable_backend
     ports:
-      - "4090:8080"
+      - "4090:8080" # 後端改 4090
     volumes:
       - ./apps/api:/app/api
       - ./data:/app/api/data
-      - claude_data:/root/.claude
-      - codex_data:/root/.codex
-      - qwen_data:/root/.qwen
-      - gemini_data:/root/.config/gemini
-      - cursor_agent_data:/root/.local/share/cursor-agent
-      - openai_data:/root/.config/openai
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - PORT=8080
+      - HOME=/root
+      - CLAUDE_HOME=/root/.claude
+      - CURSOR_HOME=/root/.local/share/cursor-agent
 
 volumes:
-  web_node_modules:
   claude_data:
   codex_data:
   qwen_data:
   gemini_data:
-  cursor_agent_data:
+  cursor_data:
   openai_data:

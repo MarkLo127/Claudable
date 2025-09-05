@@ -2,24 +2,35 @@ FROM python:3.10-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    VENV_PATH=/opt/venv
+    VENV_PATH=/opt/venv \
+    HOME=/root \
+    CLAUDE_HOME=/root/.claude \
+    CURSOR_HOME=/root/.local/share/cursor-agent
 
+# 安裝系統依賴
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential gcc \
+    build-essential gcc curl bash git \
  && rm -rf /var/lib/apt/lists/*
 
+# 建立虛擬環境
 RUN python -m venv $VENV_PATH
 ENV PATH="$VENV_PATH/bin:$PATH"
 
+# 安裝 Python 套件
 WORKDIR /app/api
+COPY requirements.txt /app/api/
+RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
-COPY requirements.txt /app/api/requirements.txt
+# 安裝 Node CLI agent（統一在後端）
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+ && apt-get install -y nodejs \
+ && npm install -g @anthropic-ai/claude-code @qwen-code/qwen-code@latest @google/gemini-cli @openai/codex \
+ && curl https://cursor.com/install -fsS | bash
 
-RUN pip install --upgrade pip \
- && pip install --no-cache-dir -r requirements.txt
-
+# 複製程式碼
 COPY . /app/api
 
+# 非 root 執行
 RUN useradd -m appuser && chown -R appuser:appuser /app
 USER appuser
 
