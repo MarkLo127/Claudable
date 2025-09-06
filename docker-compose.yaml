@@ -3,67 +3,70 @@ services:
     container_name: claudable_frontend
     build:
       context: ./apps/web
-      dockerfile: dockerfile           # 若你的檔名是 Dockerfile 改成 Dockerfile
+      dockerfile: dockerfile               # 若檔名是 Dockerfile 就改成 Dockerfile
     ports:
       - "5090:3000"
-    # 前端不要讀 .env（避免把金鑰注入容器）
     environment:
       NODE_ENV: development
-      # 給瀏覽器用的公開變數
+      # 瀏覽器端打後端（主機端口）
       NEXT_PUBLIC_API_URL: http://localhost:4090
       NEXT_PUBLIC_API_BASE: http://localhost:4090
       NEXT_PUBLIC_WS_BASE: ws://localhost:4090
-      # 伺服器端/SSR 用內部位址，避免 localhost 陷阱
+      # SSR/Route Handlers 在容器內走服務名
       INTERNAL_API_URL: http://backend:8080
     depends_on:
       - backend
     volumes:
       - ./apps/web:/app
-      - web_node_modules:/app/node_modules
+      - web_node_modules:/app/node_modules   # node_modules 不寫回主機
+      - pnpm_store:/pnpm-store               # ← 新增：pnpm store 走 named volume
+      - pnpm_state:/pnpm-state               # ← 新增：pnpm state 走 named volume
     working_dir: /app
     command: >
-      bash -lc "corepack enable &&
-                pnpm install &&
-                pnpm dev -p 3000"
+      bash -lc "
+        corepack enable &&
+        pnpm config set store-dir /pnpm-store &&
+        pnpm config set state-dir /pnpm-state &&
+        pnpm install &&
+        pnpm dev -p 3000
+      "
 
   backend:
     container_name: claudable_backend
     build:
       context: ./apps/api
-      dockerfile: dockerfile           # 若你的檔名是 Dockerfile 改成 Dockerfile
+      dockerfile: dockerfile
     ports:
       - "4090:8080"
-    # 只給 backend 注入祕密
+    # 用 .env 注入祕密（你說正確檔名是 .env，就沿用）
     env_file:
       - .env
     environment:
       HOME: /root
       XDG_CONFIG_HOME: /root/.config
       PORT: 8080
-      # 路徑用容器內掛載位置
+      # 建議用容器內掛載路徑，避免相對路徑陷阱
       PROJECTS_ROOT: /srv/data/projects
       PROJECTS_ROOT_HOST: /srv/data/projects
-      # 如果你沒用 Postgres，這些就不要放，避免程式誤判：
-      # POSTGRES_HOST: localhost
-      # POSTGRES_PORT: "5432"
-      # POSTGRES_DB: cc
-      # POSTGRES_USER: cc
-      # POSTGRES_PASSWORD: cc
+      # 重要：把 ENCRYPTION_KEY 從 .env 帶進來（若你不用 env_file，也可寫成 ENCRYPTION_KEY=${ENCRYPTION_KEY}）
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
     volumes:
       - ./apps/api:/srv/api
       - ./data:/srv/data
-      # 可選：沿用本機登入檔（若容器需要自動更新 token，拿掉 :ro）
+      # （可選）沿用你本機已登入的 provider 憑證；如果容器內需要刷新 token，拿掉 :ro
       - ${HOME}/.claude:/root/.claude:ro
       - ${HOME}/.config/openai:/root/.config/openai:ro
       - ${HOME}/.qwen:/root/.qwen:ro
       - ${HOME}/.config/gemini:/root/.config/gemini:ro
-      # cursor-agent 資料卷
+      # cursor-agent 的資料持久化
       - cursor_data:/root/.local/share/cursor-agent
-      # 啟動前置腳本（你已放在 apps/api 了）
+      # 你的啟動腳本（已在 apps/api/）
       - ./apps/api/bootstrap-cursor.sh:/usr/local/bin/bootstrap-cursor.sh:ro
     working_dir: /srv/api
     command: ["/bin/bash","-lc","/usr/local/bin/bootstrap-cursor.sh uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload"]
 
 volumes:
   web_node_modules: {}
+  pnpm_store: {}
+  pnpm_state: {}
   cursor_data: {}
