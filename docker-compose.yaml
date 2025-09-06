@@ -40,19 +40,15 @@ services:
     volumes:
       - ./apps/api:/srv/api
       - ./data:/srv/data
-      # （可選）沿用本機已登入的憑證；若需在容器內更新，拿掉 :ro
       - ${HOME}/.claude:/root/.claude:ro
       - ${HOME}/.config/openai:/root/.config/openai:ro
       - ${HOME}/.qwen:/root/.qwen:ro
       - ${HOME}/.config/gemini:/root/.config/gemini:ro
-      # cursor-agent 的資料卷
       - cursor_data:/root/.local/share/cursor-agent
-      # 把啟動腳本掛進來（也可改成在 Dockerfile 內 COPY）
-      - ../bootstrap-cursor.sh:/bootstrap-cursor.sh:ro
+      # ★ 這行改成「./」不是「../」
+      - ./bootstrap-cursor.sh:/bootstrap-cursor.sh:ro
     working_dir: /srv/api
-    # 讓 bootstrap 腳本最後 exec 我們的 uvicorn（它會把參數接著 exec）
     command: ["/bin/bash","-lc","/bootstrap-cursor.sh uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload"]
 
 volumes:
-  web_node_modules:
   cursor_data:
