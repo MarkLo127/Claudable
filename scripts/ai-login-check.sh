@@ -24,13 +24,13 @@ echo
 echo "== Ensuring writable state directories =="
 mkdir -p \
   /root/.claude/plugins /root/.claude/projects /root/.claude/sessions \
-  /root/.config/gemini /root/.config/openai \
+  /root/.config/gemini /root/.config/openai /root/.config/cursor-agent \
   /root/.qwen /root/.local/share/cursor-agent || true
 
 ready=1
 for d in /root/.claude/plugins /root/.claude/projects /root/.claude/sessions \
-         /root/.config/gemini /root/.config/openai /root/.qwen \
-         /root/.local/share/cursor-agent; do
+         /root/.config/gemini /root/.config/openai /root/.config/cursor-agent \
+         /root/.qwen /root/.local/share/cursor-agent; do
   if [ -w "$d" ]; then
     echo "  [OK] $d writable"
   else
@@ -54,12 +54,12 @@ else
   no "error running claude"; ready=0
 fi
 
-# Gemini：登入後 ~/.config/gemini 會有檔案
+# Gemini：登入後 ~/.config/gemini 會有檔案（有時需跑兩次）
 echo -n "  [Gemini] "
 if [ -n "$(ls -A /root/.config/gemini 2>/dev/null || true)" ]; then
   ok "ready"
 else
-  warn "not logged in. Run: ${BLD}docker compose run --rm -it login gemini${NC}（依畫面開連結並貼授權碼）"
+  warn "not logged in. Run: ${BLD}docker compose run --rm -it login gemini${NC}（若第一次只有選項，請再跑一次直到出現連結並貼授權碼）"
   ready=0
 fi
 
@@ -70,6 +70,24 @@ if [ -n "$(ls -A /root/.qwen 2>/dev/null || true)" ]; then
 else
   warn "not logged in. Run: ${BLD}docker compose run --rm -it login qwen${NC}"
   ready=0
+fi
+
+# Cursor Agent：確認已登入（憑證或狀態檔是否存在）
+echo -n "  [Cursor] "
+CURSOR_OK=0
+if command -v cursor-agent >/dev/null 2>&1; then
+  if grep -RqiE 'access_token|refresh_token|auth' /root/.config/cursor-agent 2>/dev/null \
+     || grep -RqiE 'access_token|refresh_token|auth' /root/.local/share/cursor-agent 2>/dev/null; then
+    CURSOR_OK=1
+  fi
+  if [ "$CURSOR_OK" = "1" ]; then
+    ok "ready"
+  else
+    warn "not logged in. Run: ${BLD}docker compose run --rm -it login 'cursor-agent login'${NC}；若版本無 login 子命令，直接執行 ${BLD}cursor-agent${NC} 進入登入流程"
+    ready=0
+  fi
+else
+  no "not installed"; ready=0
 fi
 
 # Codex：預設不擋啟動；STRICT_CODEX=1 時才強制
@@ -93,32 +111,3 @@ else
   no "Some agents are not ready. Finish login then re-run: ${BLD}docker compose up -d${NC}"
   exit 1
 fi
-
-# Cursor Agent：確認已登入（憑證或狀態檔是否存在）
-echo -n "  [Cursor] "
-CURSOR_OK=0
-if command -v cursor-agent >/dev/null 2>&1; then
-  # 先試試有沒有官方的 status 子命令（不同版本不一定有）
-  if cursor-agent --help 2>/dev/null | grep -qi "login"; then
-    # 有 login 子命令的話，嘗試找狀態檔
-    if grep -RqiE 'access_token|refresh_token|auth' /root/.config/cursor-agent 2>/dev/null \
-       || grep -RqiE 'access_token|refresh_token|auth' /root/.local/share/cursor-agent 2>/dev/null; then
-      CURSOR_OK=1
-    fi
-  else
-    # 沒有 login 子命令的舊版：一樣以檔案存在作為是否已登入
-    if grep -RqiE 'access_token|refresh_token|auth' /root/.config/cursor-agent 2>/dev/null \
-       || grep -RqiE 'access_token|refresh_token|auth' /root/.local/share/cursor-agent 2>/dev/null; then
-      CURSOR_OK=1
-    fi
-  fi
-  if [ "$CURSOR_OK" = "1" ]; then
-    ok "ready"
-  else
-    warn "not logged in. Run: docker compose run --rm -it login 'cursor-agent login'（若舊版沒有 login，直接執行 'cursor-agent' 會出現登入流程）"
-    ready=0
-  fi
-else
-  no "not installed"; ready=0
-fi
-
