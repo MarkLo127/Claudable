@@ -1,40 +1,30 @@
-FROM python:3.10-slim
+# apps/api/Dockerfile
+FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    VENV_PATH=/opt/venv \
-    HOME=/root \
-    CLAUDE_HOME=/root/.claude \
-    CURSOR_HOME=/root/.local/share/cursor-agent
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# 基本工具
+# 基本系統套件
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential gcc curl bash git ca-certificates \
- && rm -rf /var/lib/apt/lists/*
+    curl ca-certificates build-essential git && \
+    rm -rf /var/lib/apt/lists/*
 
-# 建 venv
-RUN python -m venv ${VENV_PATH}
+# 建立 venv 到 /opt/venv，之後 uvicorn/fastapi 都會在這裡
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:${PATH}"
 
-WORKDIR /app/api
-COPY requirements.txt .
+WORKDIR /srv/api
 
-# 顯式使用 venv 的 pip；裝 fastapi/uvicorn
-RUN ${VENV_PATH}/bin/pip install --upgrade pip \
- && ${VENV_PATH}/bin/pip install --no-cache-dir -r requirements.txt \
- && ${VENV_PATH}/bin/pip install --no-cache-dir "uvicorn[standard]" "fastapi>=0.110.0"
+# 先複製 requirements 以利快取
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --upgrade pip setuptools wheel && \
+    pip install -r /tmp/requirements.txt
 
-# 安裝 Node 與各家 CLI
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
- && apt-get install -y nodejs \
- && npm install -g @anthropic-ai/claude-code @qwen-code/qwen-code@latest @google/gemini-cli @openai/codex \
- && curl -fsS https://cursor.com/install | bash
+# 再複製程式碼
+COPY . /srv/api
 
-# 放後端程式碼
-COPY . .
-
-# 啟動腳本（自動處理 cursor-agent symlink）
-COPY bootstrap-cursor.sh /usr/local/bin/bootstrap-cursor.sh
-RUN chmod +x /usr/local/bin/bootstrap-cursor.sh
-
-ENTRYPOINT ["/usr/local/bin/bootstrap-cursor.sh"]
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+EXPOSE 8080
+# 預設 CMD（compose 會覆蓋為經 bootstrap 啟動；這裡只是備援）
+CMD ["uvicorn","app.main:app","--host","0.0.0.0","--port","8080"]
