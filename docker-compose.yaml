@@ -1,13 +1,11 @@
-version: "3.9"
-
 services:
   frontend:
     container_name: claudable_frontend
     build:
       context: ./apps/web
-      dockerfile: Dockerfile
+      dockerfile: dockerfile
     ports:
-      - "5090:3000"
+      - "5090:3000"                            # 前端
     env_file:
       - .env
     environment:
@@ -18,7 +16,7 @@ services:
       - backend
     volumes:
       - ./apps/web:/app
-      - web_node_modules:/app/node_modules
+      - web_node_modules:/app/node_modules     # ← 需要在下方 volumes 宣告
     working_dir: /app
     command: >
       bash -lc "corepack enable &&
@@ -29,26 +27,31 @@ services:
     container_name: claudable_backend
     build:
       context: ./apps/api
-      dockerfile: Dockerfile
+      dockerfile: dockerfile
     ports:
-      - "4090:8080"
+      - "4090:8080"                            # 後端
     env_file:
       - .env
     environment:
       - HOME=/root
       - XDG_CONFIG_HOME=/root/.config
+      # 如果你有放在 .env，以下會自動帶入；沒放就刪掉或補上值
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
     volumes:
       - ./apps/api:/srv/api
       - ./data:/srv/data
+      # （可選）沿用本機登入檔；若需在容器更新，拿掉 :ro
       - ${HOME}/.claude:/root/.claude:ro
       - ${HOME}/.config/openai:/root/.config/openai:ro
       - ${HOME}/.qwen:/root/.qwen:ro
       - ${HOME}/.config/gemini:/root/.config/gemini:ro
+      # cursor-agent 資料
       - cursor_data:/root/.local/share/cursor-agent
-      # ★ 這行改成「./」不是「../」
+      # 直接掛你剛剛的腳本到容器 PATH（唯讀）
       - ./apps/api/bootstrap-cursor.sh:/usr/local/bin/bootstrap-cursor.sh:ro
     working_dir: /srv/api
     command: ["/bin/bash","-lc","/usr/local/bin/bootstrap-cursor.sh uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload"]
 
 volumes:
-  cursor_data:
+  web_node_modules: {}
+  cursor_data: {}
