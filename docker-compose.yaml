@@ -46,9 +46,9 @@ services:
       - ${HOME}/.config/gemini:/root/.config/gemini:ro
       - cursor_data:/root/.local/share/cursor-agent
       # ★ 這行改成「./」不是「../」
-      - ./bootstrap-cursor.sh:/bootstrap-cursor.sh:ro
+      - ./apps/api/bootstrap-cursor.sh:/usr/local/bin/bootstrap-cursor.sh:ro
     working_dir: /srv/api
-    command: ["/bin/bash","-lc","/bootstrap-cursor.sh uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload"]
+    command: ["/bin/bash","-lc","/usr/local/bin/bootstrap-cursor.sh uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload"]
 
 volumes:
   cursor_data:
