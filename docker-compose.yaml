@@ -1,36 +1,75 @@
 services:
+  # 互動登入前置檢查：任何一個 AI 未就緒就 exit 1，阻擋 backend/frontend 啟動
+  login:
+    container_name: claudable_login
+    build:
+      context: ./apps/api
+      dockerfile: dockerfile
+    environment:
+      HOME: /root
+      XDG_CONFIG_HOME: /root/.config
+      PATH: "/opt/venv/bin:/usr/local/bin:/usr/bin:/bin:/root/.local/bin"
+    stdin_open: true     # 讓你可 docker compose run -it login 互動登入
+    tty: true
+    volumes:
+      - ./apps/api:/srv/api
+
+      # Claude：父唯讀；子資料夾可寫（CLI 會寫 projects/sessions/plugins）
+      - ${HOME}/.claude:/root/.claude:ro
+      - claude_plugins:/root/.claude/plugins
+      - claude_projects:/root/.claude/projects
+      - claude_sessions:/root/.claude/sessions
+
+      # Gemini / Qwen / Cursor：保存登入狀態
+      - gemini_state:/root/.config/gemini
+      - qwen_state:/root/.qwen
+      - cursor_data:/root/.local/share/cursor-agent
+
+      # Codex（OpenAI CLI）登入狀態
+      - openai_state:/root/.config/openai
+
+      # 檢查腳本
+      - ./scripts/ai-login-check.sh:/usr/local/bin/ai-login-check.sh:ro
+    working_dir: /srv/api
+    command: ["/bin/bash","-lc","/usr/local/bin/ai-login-check.sh"]
+
   backend:
     container_name: claudable_backend
     build:
       context: ./apps/api
-      dockerfile: dockerfile          # 若你的檔名是 Dockerfile 就改成 Dockerfile
+      dockerfile: dockerfile
     ports:
       - "4090:8080"
+    # .env 可只放 ENCRYPTION_KEY 等非 AI key；AI 全部互動登入，不需要金鑰
     env_file:
-      - .env                          # 後端讀取金鑰：ANTHROPIC_* / OPENAI_* / GOOGLE_* / GEMINI_* / DASHSCOPE_* / ENCRYPTION_KEY
+      - .env
     environment:
       HOME: /root
       XDG_CONFIG_HOME: /root/.config
       PORT: 8080
       PROJECTS_ROOT: /srv/data/projects
       PROJECTS_ROOT_HOST: /srv/data/projects
-      # 讓後端進程能找到你安裝的 CLI（claude/gemini/qwen/codex/cursor-agent）
       PATH: "/opt/venv/bin:/usr/local/bin:/usr/bin:/bin:/root/.local/bin"
+    depends_on:
+      login:
+        condition: service_completed_successfully
     volumes:
       - ./apps/api:/srv/api
       - ./data:/srv/data
 
-      # 供應商憑證：父路徑唯讀，plugins 子資料夾可寫（避免 EROFS）
+      # Claude：父唯讀 + 子資料夾可寫（避免 EROFS）
       - ${HOME}/.claude:/root/.claude:ro
       - claude_plugins:/root/.claude/plugins
-      - ${HOME}/.config/openai:/root/.config/openai:ro
-      - ${HOME}/.qwen:/root/.qwen:ro
-      - ${HOME}/.config/gemini:/root/.config/gemini:ro
+      - claude_projects:/root/.claude/projects
+      - claude_sessions:/root/.claude/sessions
 
-      # cursor-agent 資料
+      # Gemini / Qwen / Cursor / Codex 狀態（沿用 login 的卷，持久化登入）
+      - gemini_state:/root/.config/gemini
+      - qwen_state:/root/.qwen
       - cursor_data:/root/.local/share/cursor-agent
+      - openai_state:/root/.config/openai
 
-      # 啟動腳本（若已 COPY 進 image，就移除此行）
+      # 啟動腳本（若已 COPY 進 image 可刪）
       - ./apps/api/bootstrap-cursor.sh:/usr/local/bin/bootstrap-cursor.sh:ro
     working_dir: /srv/api
     command: ["/bin/bash","-lc","/usr/local/bin/bootstrap-cursor.sh uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload"]
@@ -39,16 +78,14 @@ services:
     container_name: claudable_frontend
     build:
       context: ./apps/web
-      dockerfile: dockerfile          # 若你的檔名是 Dockerfile 就改成 Dockerfile
+      dockerfile: dockerfile
     ports:
       - "5090:3000"
     environment:
       NODE_ENV: development
-      # 瀏覽器上要打的 API（主機端口）
       NEXT_PUBLIC_API_URL: http://localhost:4090
       NEXT_PUBLIC_API_BASE: http://localhost:4090
       NEXT_PUBLIC_WS_BASE: ws://localhost:4090
-      # 伺服器端（容器內）走服務名
       INTERNAL_API_URL: http://backend:8080
     depends_on:
       backend:
@@ -56,7 +93,6 @@ services:
     volumes:
       - ./apps/web:/app
       - web_node_modules:/app/node_modules
-      # 避免在本機倉庫生成 .pnpm / .pnpm-store
       - pnpm_store:/pnpm-store
       - pnpm_state:/pnpm-state
     working_dir: /app
@@ -75,3 +111,8 @@ volumes:
   pnpm_state: {}
   cursor_data: {}
   claude_plugins: {}
+  claude_projects: {}
+  claude_sessions: {}
+  gemini_state: {}
+  qwen_state: {}
+  openai_state: {}
