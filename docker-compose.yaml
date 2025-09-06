@@ -35,7 +35,7 @@ services:
       - "4090:8080"
     # 只給 backend 注入祕密
     env_file:
-      - .env.backend
+      - .env
     environment:
       HOME: /root
       XDG_CONFIG_HOME: /root/.config
