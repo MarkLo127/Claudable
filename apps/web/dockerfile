@@ -2,16 +2,13 @@ FROM node:20-bullseye
 
 WORKDIR /app/web
 
-# 安裝必要工具
 RUN apt-get update && apt-get install -y curl bash git \
     && rm -rf /var/lib/apt/lists/*
 
-# 安裝 pnpm
 RUN npm install -g pnpm
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:/pnpm/bin:$PATH
 
-# 複製 package.json 安裝前端依賴
 COPY package.json pnpm-lock.yaml* ./
 RUN pnpm install --frozen-lockfile
 

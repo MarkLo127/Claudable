@@ -4,34 +4,40 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     VENV_PATH=/opt/venv \
     HOME=/root \
-    CLAUDE_HOME=/root/.claude \
-    CURSOR_HOME=/root/.local/share/cursor-agent
+    XDG_CONFIG_HOME=/root/.config \
+    PATH="/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
-# 安裝系統依賴
+# 1) 基礎系統依賴
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential gcc curl bash git \
+    build-essential gcc curl bash git ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
-# 建立虛擬環境
+# 2) Python venv
 RUN python -m venv $VENV_PATH
 ENV PATH="$VENV_PATH/bin:$PATH"
 
-# 安裝 Python 套件
 WORKDIR /app/api
-COPY requirements.txt /app/api/
+
+# 3) 安裝 Python 依賴
+COPY requirements.txt .
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
-# 安裝 Node CLI agent（統一在後端）
+# 4) 安裝 Node.js 20（Linux）+ 五個 Agent CLI（Linux 版）
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
  && apt-get install -y nodejs \
- && npm install -g @anthropic-ai/claude-code @qwen-code/qwen-code@latest @google/gemini-cli @openai/codex \
- && curl https://cursor.com/install -fsS | bash
+ && npm install -g \
+      @anthropic-ai/claude-code \
+      @qwen-code/qwen-code@latest \
+      @google/gemini-cli \
+      @openai/codex \
+ && curl https://cursor.com/install -fsS | bash \
+ && ln -sf /root/.local/bin/cursor-agent /usr/local/bin/cursor-agent
 
-# 複製程式碼
-COPY . /app/api
+# 5) 複製後端程式碼
+COPY . .
 
-# 非 root 執行
-RUN useradd -m appuser && chown -R appuser:appuser /app
-USER appuser
+# 6) 以 root 執行（讓 CLI 按預設路徑讀取 /root 下憑證）
+USER root
 
+# 7) 啟動 API（依你的實際 entrpoint 調整）
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]

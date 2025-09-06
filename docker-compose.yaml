@@ -4,9 +4,10 @@ services:
   frontend:
     build:
       context: ./apps/web
+      dockerfile: dockerfile
     container_name: claudable_frontend
     ports:
-      - "5090:3000" # 前端改 5090
+      - "5090:3000"      # 前端 -> 5090
     environment:
       - NEXT_PUBLIC_API_URL=http://backend:4090
     depends_on:
@@ -15,23 +16,18 @@ services:
   backend:
     build:
       context: ./apps/api
+      dockerfile: dockerfile
     container_name: claudable_backend
     ports:
-      - "4090:8080" # 後端改 4090
+      - "4090:8080"      # 後端 -> 4090
+    # ★★ 掛載「本機憑證資料夾」（只讀）→ 容器內不用再登入
     volumes:
-      - ./apps/api:/app/api
-      - ./data:/app/api/data
+      - ~/.claude:/root/.claude:ro
+      - ~/.config/openai:/root/.config/openai:ro
+      - ~/.qwen:/root/.qwen:ro
+      - ~/.config/gemini:/root/.config/gemini:ro
+      - cursor_data:/root/.local/share/cursor-agent
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - PORT=8080
       - HOME=/root
-      - CLAUDE_HOME=/root/.claude
-      - CURSOR_HOME=/root/.local/share/cursor-agent
-
-volumes:
-  claude_data:
-  codex_data:
-  qwen_data:
-  gemini_data:
-  cursor_data:
-  openai_data:
+      - XDG_CONFIG_HOME=/root/.config
+      - PATH=/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
