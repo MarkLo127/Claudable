@@ -1,33 +1,85 @@
+# docker-compose.yaml
+#
+# 需要在專案根目錄準備一個 .env（不進版控），至少包含：
+# ANTHROPIC_API_KEY=xxxx
+# OPENAI_API_KEY=xxxx
+# GEMINI_API_KEY=xxxx               # 有些 SDK/CLI 叫 GOOGLE_API_KEY
+# DASHSCOPE_API_KEY=xxxx            # Qwen/Ali（也有人用 QWEN_API_KEY）
+#
+# 如果你想沿用本機 CLI 登入檔，也可保留下方 volumes 的掛載（~/.claude、~/.config/openai…）。
+# 若 CLI 需要在容器內更新憑證，把對應掛載移除 :ro（改成可寫）。
+#
+# 連線說明：
+# - 瀏覽器端打後端：NEXT_PUBLIC_API_URL（對主機埠，這裡用 http://localhost:4090）
+# - 伺服器端/SSR 打後端：INTERNAL_API_URL（走 docker 內部網路 http://backend:8080）
+
 version: "3.9"
 
 services:
   frontend:
+    container_name: claudable_frontend
     build:
       context: ./apps/web
-      dockerfile: dockerfile
-    container_name: claudable_frontend
+      dockerfile: dockerfile         # 若你的檔名是 Dockerfile，這裡要改成 Dockerfile
     ports:
-      - "5090:3000"      # 前端 -> 5090
+      - "5090:3000"                  # 主機 5090 -> Next.js 3000
+    env_file:
+      - .env
     environment:
-      - NEXT_PUBLIC_API_URL=http://backend:4090
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:4090   # 給瀏覽器用
+      - INTERNAL_API_URL=http://backend:8080        # SSR/Route Handler 用
     depends_on:
       - backend
+    volumes:
+      # 開發期熱更新（可選）：把程式碼掛進容器
+      - ./apps/web:/app
+      - web_node_modules:/app/node_modules
+    working_dir: /app
+    command: >
+      sh -lc "corepack enable &&
+              pnpm install &&
+              pnpm dev -p 3000"
 
   backend:
+    container_name: claudable_backend
     build:
       context: ./apps/api
-      dockerfile: dockerfile
-    container_name: claudable_backend
+      dockerfile: dockerfile         # 若檔名是 Dockerfile，這裡要改成 Dockerfile
     ports:
-      - "4090:8080"      # 後端 -> 4090
-    # ★★ 掛載「本機憑證資料夾」（只讀）→ 容器內不用再登入
-    volumes:
-      - ~/.claude:/root/.claude:ro
-      - ~/.config/openai:/root/.config/openai:ro
-      - ~/.qwen:/root/.qwen:ro
-      - ~/.config/gemini:/root/.config/gemini:ro
-      - cursor_data:/root/.local/share/cursor-agent
+      - "4090:8080"                  # 主機 4090 -> API 8080
+    env_file:
+      - .env
     environment:
       - HOME=/root
       - XDG_CONFIG_HOME=/root/.config
-      - PATH=/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      - PORT=8080
+      # 以環境變數提供金鑰（推薦做法）
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+    volumes:
+      # 後端程式碼與資料庫（SQLite）持久化
+      - ./apps/api:/srv/api
+      - ./data:/srv/data
+      # 可選：沿用「本機已登入」的 CLI 憑證（唯讀；若需在容器更新，拿掉 :ro）
+      - ${HOME}/.claude:/root/.claude:ro
+      - ${HOME}/.config/openai:/root/.config/openai:ro
+      - ${HOME}/.qwen:/root/.qwen:ro
+      - ${HOME}/.config/gemini:/root/.config/gemini:ro
+      # cursor-agent 之類的 session 資料（可寫卷）
+      - cursor_data:/root/.local/share/cursor-agent
+    working_dir: /srv/api
+    # 讓你的後端以專案內既有啟動腳本啟動（兩種寫法選一種，視你的專案而定）
+    # 若你的專案用 Python/uvicorn，改成 uvicorn 啟動指令即可
+    command: >
+      sh -lc "if [ -f scripts/run-api.js ]; then
+                 node scripts/run-api.js;
+               else
+                 python -m app.main || uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload;
+               fi"
+
+volumes:
+  web_node_modules:
+  cursor_data:
