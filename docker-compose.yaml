@@ -1,5 +1,5 @@
 services:
-  # 互動登入前置檢查：任何一個 AI 未就緒就 exit 1，阻擋 backend/frontend 啟動
+  # 互動登入前置檢查：任何 AI 未就緒就 exit 1，阻擋 backend/frontend 啟動
   login:
     container_name: claudable_login
     build:
@@ -9,23 +9,20 @@ services:
       HOME: /root
       XDG_CONFIG_HOME: /root/.config
       PATH: "/opt/venv/bin:/usr/local/bin:/usr/bin:/bin:/root/.local/bin"
-    stdin_open: true     # 讓你可 docker compose run -it login 互動登入
+    stdin_open: true
     tty: true
     volumes:
       - ./apps/api:/srv/api
 
-      # Claude：父唯讀；子資料夾可寫（CLI 會寫 projects/sessions/plugins）
-      - ${HOME}/.claude:/root/.claude:ro
+      # Claude 狀態（全部用 named volumes，可寫）
       - claude_plugins:/root/.claude/plugins
       - claude_projects:/root/.claude/projects
       - claude_sessions:/root/.claude/sessions
 
-      # Gemini / Qwen / Cursor：保存登入狀態
+      # Gemini / Qwen / Cursor / Codex（OpenAI）狀態（可寫）
       - gemini_state:/root/.config/gemini
       - qwen_state:/root/.qwen
       - cursor_data:/root/.local/share/cursor-agent
-
-      # Codex（OpenAI CLI）登入狀態
       - openai_state:/root/.config/openai
 
       # 檢查腳本
@@ -40,7 +37,7 @@ services:
       dockerfile: dockerfile
     ports:
       - "4090:8080"
-    # .env 可只放 ENCRYPTION_KEY 等非 AI key；AI 全部互動登入，不需要金鑰
+    # .env 只需放非 AI 的設定（例如 ENCRYPTION_KEY 等）
     env_file:
       - .env
     environment:
@@ -57,13 +54,12 @@ services:
       - ./apps/api:/srv/api
       - ./data:/srv/data
 
-      # Claude：父唯讀 + 子資料夾可寫（避免 EROFS）
-      - ${HOME}/.claude:/root/.claude:ro
+      # Claude（全部用 named volumes，避免 EROFS）
       - claude_plugins:/root/.claude/plugins
       - claude_projects:/root/.claude/projects
       - claude_sessions:/root/.claude/sessions
 
-      # Gemini / Qwen / Cursor / Codex 狀態（沿用 login 的卷，持久化登入）
+      # Gemini / Qwen / Cursor / Codex（OpenAI）狀態
       - gemini_state:/root/.config/gemini
       - qwen_state:/root/.qwen
       - cursor_data:/root/.local/share/cursor-agent
