@@ -72,14 +72,6 @@ else
   ready=0
 fi
 
-# Cursor Agent：通常不需登入；僅確認可執行
-echo -n "  [Cursor] "
-if command -v cursor-agent >/dev/null 2>&1; then
-  ok "ready"
-else
-  no "not installed"; ready=0
-fi
-
 # Codex：預設不擋啟動；STRICT_CODEX=1 時才強制
 echo -n "  [Codex] "
 if [ -n "$(ls -A /root/.config/openai 2>/dev/null || true)" ]; then
