@@ -2,7 +2,7 @@
 set -euo pipefail
 
 echo "== AI Login Wizard (auto-retry) =="
-echo "將依序處理互動登入：Claude → Gemini → Qwen → Codex →（Cursor Agent 只驗證）"
+echo "將依序處理互動登入：Claude → Gemini → Qwen → Codex → Cursor Agent"
 read -p "按 Enter 開始（Ctrl+C 取消）" _
 
 run_i() { docker compose run --rm -it login bash -lc "$* || true"; }
