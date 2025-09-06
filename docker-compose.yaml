@@ -54,14 +54,14 @@ services:
       - ./apps/api:/srv/api
       - ./data:/srv/data
       # （可選）沿用你本機已登入的 provider 憑證；如果容器內需要刷新 token，拿掉 :ro
-      - ${HOME}/.claude:/root/.claude:ro
-      - ${HOME}/.config/openai:/root/.config/openai:ro
-      - ${HOME}/.qwen:/root/.qwen:ro
-      - ${HOME}/.config/gemini:/root/.config/gemini:ro
+      - ${HOME}/.claude:/root/.claude
+      - ${HOME}/.config/openai:/root/.config/openai
+      - ${HOME}/.qwen:/root/.qwen
+      - ${HOME}/.config/gemini:/root/.config/gemini
       # cursor-agent 的資料持久化
       - cursor_data:/root/.local/share/cursor-agent
       # 你的啟動腳本（已在 apps/api/）
-      - ./apps/api/bootstrap-cursor.sh:/usr/local/bin/bootstrap-cursor.sh:ro
+      - ./apps/api/bootstrap-cursor.sh:/usr/local/bin/bootstrap-cursor.sh
     working_dir: /srv/api
     command: ["/bin/bash","-lc","/usr/local/bin/bootstrap-cursor.sh uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload"]
 
