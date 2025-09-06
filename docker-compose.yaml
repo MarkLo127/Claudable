@@ -13,6 +13,7 @@ services:
     tty: true
     volumes:
       - ./apps/api:/srv/api
+      - cursor_config:/root/.config/cursor-agent
 
       # Claude 狀態（全部用 named volumes，可寫）
       - claude_plugins:/root/.claude/plugins
@@ -63,6 +64,7 @@ services:
       - gemini_state:/root/.config/gemini
       - qwen_state:/root/.qwen
       - cursor_data:/root/.local/share/cursor-agent
+      - cursor_config:/root/.config/cursor-agent
       - openai_state:/root/.config/openai
 
       # 啟動腳本（若已 COPY 進 image 可刪）
@@ -112,3 +114,4 @@ volumes:
   gemini_state: {}
   qwen_state: {}
   openai_state: {}
+  cursor_config: {}

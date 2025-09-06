@@ -101,3 +101,32 @@ else
   no "Some agents are not ready. Finish login then re-run: ${BLD}docker compose up -d${NC}"
   exit 1
 fi
+
+# Cursor Agent：確認已登入（憑證或狀態檔是否存在）
+echo -n "  [Cursor] "
+CURSOR_OK=0
+if command -v cursor-agent >/dev/null 2>&1; then
+  # 先試試有沒有官方的 status 子命令（不同版本不一定有）
+  if cursor-agent --help 2>/dev/null | grep -qi "login"; then
+    # 有 login 子命令的話，嘗試找狀態檔
+    if grep -RqiE 'access_token|refresh_token|auth' /root/.config/cursor-agent 2>/dev/null \
+       || grep -RqiE 'access_token|refresh_token|auth' /root/.local/share/cursor-agent 2>/dev/null; then
+      CURSOR_OK=1
+    fi
+  else
+    # 沒有 login 子命令的舊版：一樣以檔案存在作為是否已登入
+    if grep -RqiE 'access_token|refresh_token|auth' /root/.config/cursor-agent 2>/dev/null \
+       || grep -RqiE 'access_token|refresh_token|auth' /root/.local/share/cursor-agent 2>/dev/null; then
+      CURSOR_OK=1
+    fi
+  fi
+  if [ "$CURSOR_OK" = "1" ]; then
+    ok "ready"
+  else
+    warn "not logged in. Run: docker compose run --rm -it login 'cursor-agent login'（若舊版沒有 login，直接執行 'cursor-agent' 會出現登入流程）"
+    ready=0
+  fi
+else
+  no "not installed"; ready=0
+fi
+

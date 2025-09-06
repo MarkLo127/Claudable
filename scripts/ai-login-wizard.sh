@@ -54,3 +54,18 @@ else
   echo "❌ 仍有未就緒的代理，請依提示完成登入後再重試。"
   exit 1
 fi
+
+echo
+echo "─── Cursor Agent"
+# 直到偵測到憑證才結束
+until docker compose run --rm login bash -lc \
+  'grep -RqiE "access_token|refresh_token|auth" /root/.config/cursor-agent 2>/dev/null || \
+   grep -RqiE "access_token|refresh_token|auth" /root/.local/share/cursor-agent 2>/dev/null'; do
+  # 若支援 login 子命令，優先用；否則直接執行 cursor-agent 讓它彈登入
+  if docker compose run --rm login bash -lc "cursor-agent --help 2>/dev/null | grep -qi login"; then
+    docker compose run --rm -it login bash -lc 'cursor-agent login || true'
+  else
+    docker compose run --rm -it login bash -lc 'cursor-agent || true'
+  fi
+done
+echo "✅ Cursor Agent 就緒"
