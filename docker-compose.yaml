@@ -1,26 +1,64 @@
 services:
+  backend:
+    container_name: claudable_backend
+    build:
+      context: ./apps/api
+      dockerfile: dockerfile          # 若你的檔名是 Dockerfile 就改成 Dockerfile
+    ports:
+      - "4090:8080"
+    env_file:
+      - .env                          # 後端讀取金鑰：ANTHROPIC_* / OPENAI_* / GOOGLE_* / GEMINI_* / DASHSCOPE_* / ENCRYPTION_KEY
+    environment:
+      HOME: /root
+      XDG_CONFIG_HOME: /root/.config
+      PORT: 8080
+      PROJECTS_ROOT: /srv/data/projects
+      PROJECTS_ROOT_HOST: /srv/data/projects
+      # 讓後端進程能找到你安裝的 CLI（claude/gemini/qwen/codex/cursor-agent）
+      PATH: "/opt/venv/bin:/usr/local/bin:/usr/bin:/bin:/root/.local/bin"
+    volumes:
+      - ./apps/api:/srv/api
+      - ./data:/srv/data
+
+      # 供應商憑證：父路徑唯讀，plugins 子資料夾可寫（避免 EROFS）
+      - ${HOME}/.claude:/root/.claude:ro
+      - claude_plugins:/root/.claude/plugins
+      - ${HOME}/.config/openai:/root/.config/openai:ro
+      - ${HOME}/.qwen:/root/.qwen:ro
+      - ${HOME}/.config/gemini:/root/.config/gemini:ro
+
+      # cursor-agent 資料
+      - cursor_data:/root/.local/share/cursor-agent
+
+      # 啟動腳本（若已 COPY 進 image，就移除此行）
+      - ./apps/api/bootstrap-cursor.sh:/usr/local/bin/bootstrap-cursor.sh:ro
+    working_dir: /srv/api
+    command: ["/bin/bash","-lc","/usr/local/bin/bootstrap-cursor.sh uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload"]
+
   frontend:
     container_name: claudable_frontend
     build:
       context: ./apps/web
-      dockerfile: dockerfile               # 若檔名是 Dockerfile 就改成 Dockerfile
+      dockerfile: dockerfile          # 若你的檔名是 Dockerfile 就改成 Dockerfile
     ports:
       - "5090:3000"
     environment:
       NODE_ENV: development
-      # 瀏覽器端打後端（主機端口）
+      # 瀏覽器上要打的 API（主機端口）
       NEXT_PUBLIC_API_URL: http://localhost:4090
       NEXT_PUBLIC_API_BASE: http://localhost:4090
       NEXT_PUBLIC_WS_BASE: ws://localhost:4090
-      # SSR/Route Handlers 在容器內走服務名
+      # 伺服器端（容器內）走服務名
       INTERNAL_API_URL: http://backend:8080
     depends_on:
-      - backend
+      backend:
+        condition: service_started
     volumes:
       - ./apps/web:/app
-      - web_node_modules:/app/node_modules   # node_modules 不寫回主機
-      - pnpm_store:/pnpm-store               # ← 新增：pnpm store 走 named volume
-      - pnpm_state:/pnpm-state               # ← 新增：pnpm state 走 named volume
+      - web_node_modules:/app/node_modules
+      # 避免在本機倉庫生成 .pnpm / .pnpm-store
+      - pnpm_store:/pnpm-store
+      - pnpm_state:/pnpm-state
     working_dir: /app
     command: >
       bash -lc "
@@ -31,42 +69,9 @@ services:
         pnpm dev -p 3000
       "
 
-  backend:
-    container_name: claudable_backend
-    build:
-      context: ./apps/api
-      dockerfile: dockerfile
-    ports:
-      - "4090:8080"
-    # 用 .env 注入祕密（你說正確檔名是 .env，就沿用）
-    env_file:
-      - .env
-    environment:
-      HOME: /root
-      XDG_CONFIG_HOME: /root/.config
-      PORT: 8080
-      # 建議用容器內掛載路徑，避免相對路徑陷阱
-      PROJECTS_ROOT: /srv/data/projects
-      PROJECTS_ROOT_HOST: /srv/data/projects
-      # 重要：把 ENCRYPTION_KEY 從 .env 帶進來（若你不用 env_file，也可寫成 ENCRYPTION_KEY=${ENCRYPTION_KEY}）
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
-    volumes:
-      - ./apps/api:/srv/api
-      - ./data:/srv/data
-      # （可選）沿用你本機已登入的 provider 憑證；如果容器內需要刷新 token，拿掉 :ro
-      - ${HOME}/.claude:/root/.claude
-      - ${HOME}/.config/openai:/root/.config/openai
-      - ${HOME}/.qwen:/root/.qwen
-      - ${HOME}/.config/gemini:/root/.config/gemini
-      # cursor-agent 的資料持久化
-      - cursor_data:/root/.local/share/cursor-agent
-      # 你的啟動腳本（已在 apps/api/）
-      - ./apps/api/bootstrap-cursor.sh:/usr/local/bin/bootstrap-cursor.sh
-    working_dir: /srv/api
-    command: ["/bin/bash","-lc","/usr/local/bin/bootstrap-cursor.sh uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload"]
-
 volumes:
   web_node_modules: {}
   pnpm_store: {}
   pnpm_state: {}
   cursor_data: {}
+  claude_plugins: {}
