@@ -42,7 +42,7 @@ RUN set -eux; \
     ln -sf "$HOME/.local/share/cursor-agent/versions/$v/cursor-agent" /usr/local/bin/cursor-agent; \
   fi
 
-# ★ 用 command -v 掃描實際安裝到的 binary，再建立你後端程式碼期望的命令別名
+# 用 command -v 掃描實際安裝到的 binary，建立命令別名
 RUN set -eux; \
   linkif() { src="$1"; dst="$2"; if command -v "$src" >/dev/null 2>&1; then ln -sf "$(command -v "$src")" "/usr/local/bin/$dst"; fi; }; \
   linkif claude-code    claude; \
@@ -52,6 +52,15 @@ RUN set -eux; \
   linkif codex          codex; \
   linkif dashscope      qwen; \
   true
+
+# ★ 預先建立掛載點（避免 volume 掛載時找不到/或父路徑唯讀造成的 EROFS）
+RUN mkdir -p \
+    /root/.claude/plugins \
+    /root/.claude/projects \
+    /root/.claude/sessions \
+    /root/.config/gemini \
+    /root/.config/openai \
+    /root/.qwen
 
 WORKDIR /srv/api
 COPY . /srv/api/
