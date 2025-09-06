@@ -1,73 +1,37 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
-echo "== AI Login Wizard (Claude 一次、其餘可重試) =="
-echo "將依序處理互動登入：Claude → Gemini → Qwen → Codex → Cursor"
-read -p "按 Enter 開始（Ctrl+C 取消）" _
+# 讓你可以覆寫專案名稱
+: "${COMPOSE_PROJECT_NAME:=claudable}"
 
-run_i() { docker compose run --rm -it login bash -lc "$* || true"; }
-check() { docker compose run --rm login bash -lc "$*"; }
+echo "== AI Login Wizard =="
+echo "將在 login 容器內啟動互動檢查器（Claude→Gemini→Qwen→Codex→Cursor）。"
+echo "提示：Claude 只會啟動一次；Gemini 會自動重啟最多兩次以顯示授權連結。"
+read -rp $'\n按 Enter 開始（Ctrl+C 取消）'
 
-echo
-echo "─── Claude（只開一次 REPL；退出後直接往下）"
-echo "提示：在 REPL 內輸入 /login 完成瀏覽器驗證，完成後輸入 /exit 退出"
-run_i 'claude'
-# 不重啟；只做一次檢查，未登入也先往下，最後總體驗收再擋
-if ! check 'out=$(claude -p "ping" --output-format text --max-turns 1 2>&1 || true); ! echo "$out" | grep -qiE "/login|please log in|authorize|invalid|unauthorized"'; then
-  echo "⚠️  Claude 仍未檢出登入（之後的總體檢查會再確認）。"
+# 先確保映射目錄存在（避免 EROFS）
+mkdir -p \
+  apps/api \
+  data \
+  # 以下是 host 端不一定需要存在，但建一下更穩妥
+  /tmp/claudable-host-placeholder >/dev/null 2>&1 || true
+
+# 檢查必要 volumes 是否在 compose 中（尤其是 ~/.gemini）
+# 這裡不硬性解析 YAML，僅提示；真正的映射以 compose 為準
+echo -e "\n[檢查] 請確認 docker-compose.yaml 有映射：gemini_home:/root/.gemini、gemini_state:/root/.config/gemini、claude_* 等。"
+
+# 進容器跑檢查器（互動）
+docker compose -p "$COMPOSE_PROJECT_NAME" run --rm -it \
+  -e STRICT_CLAUDE="${STRICT_CLAUDE:-0}" \
+  -e STRICT_CODEX="${STRICT_CODEX:-0}" \
+  -e GEMINI_MAX_RUNS="${GEMINI_MAX_RUNS:-2}" \
+  login /usr/local/bin/ai-login-check.sh
+
+status=$?
+if [[ $status -eq 0 ]]; then
+  echo -e "\n✅ 互動登入完成，可啟動服務："
+  echo "   docker compose -p $COMPOSE_PROJECT_NAME up -d"
 else
-  echo "✅ Claude 就緒"
+  echo -e "\n❌ 尚未全部完成登入；可修正後重跑本嚮導。"
 fi
-
-echo
-echo "─── Gemini（新版把狀態寫在 ~/.gemini；會自動重試直到檢出登入）"
-# 直到 ~/.gemini 或 ~/.config/gemini 出現內容才算完成
-until check '[ -n "$(ls -A /root/.gemini 2>/dev/null || true)" ] || [ -n "$(ls -A /root/.config/gemini 2>/dev/null || true)" ]'; do
-  # 第一次通常只顯示選單，選「Login with Google」後會提示 Restart
-  # 再跑一次才會印出真正的授權連結；這裡每回合都給你互動 TTY
-  run_i 'if command -v gemini >/dev/null 2>&1; then gemini; else google-gemini; fi'
-  sleep 0.5
-done
-echo "✅ Gemini 就緒"
-
-echo
-echo "─── Qwen（將重試到檢出已登入）"
-until check '[ -n "$(ls -A /root/.qwen 2>/dev/null || true)" ]'; do
-  run_i 'qwen'
-  sleep 0.5
-done
-echo "✅ Qwen 就緒"
-
-echo
-echo "─── Codex（可選；預設不強制）"
-if ! check '[ -n "$(ls -A /root/.config/openai 2>/dev/null || true)" ]'; then
-  run_i 'codex'
-fi
-echo "ℹ️  Codex 登入狀態將在最終檢查顯示（預設不強制）"
-
-echo
-echo "─── Cursor Agent（將重試到檢出已登入憑證）"
-until check 'grep -RqiE "access_token|refresh_token|auth" /root/.config/cursor-agent 2>/dev/null || grep -RqiE "access_token|refresh_token|auth" /root/.local/share/cursor-agent 2>/dev/null'; do
-  if check "cursor-agent --help 2>/dev/null | grep -qi login"; then
-    run_i 'cursor-agent login'
-  else
-    run_i 'cursor-agent'
-  fi
-  sleep 0.5
-done
-echo "✅ Cursor Agent 就緒"
-
-echo
-echo "== 最終檢查 =="
-if check '/usr/local/bin/ai-login-check.sh'; then
-  echo "✅ 登入完成，啟動服務 ..."
-  docker compose up -d
-else
-  echo "❌ 仍有未就緒的代理。請依提示完成登入後再重試："
-  echo "   - Claude：docker compose run --rm -it login claude  # REPL 內 /login、完成後 /exit"
-  echo "   - Gemini：docker compose run --rm -it login gemini  # 直到顯示連結並貼授權碼（狀態寫在 ~/.gemini）"
-  echo "   - Qwen：  docker compose run --rm -it login qwen"
-  echo "   - Codex： docker compose run --rm -it login codex"
-  echo "   - Cursor：docker compose run --rm -it login 'cursor-agent login'  或直接 'cursor-agent'"
-  exit 1
-fi
+exit $status
