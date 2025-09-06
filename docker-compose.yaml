@@ -22,6 +22,7 @@ services:
 
       # Gemini / Qwen / Cursor / Codex（OpenAI）狀態（可寫）
       - gemini_state:/root/.config/gemini
+      - gemini_home:/root/.gemini
       - qwen_state:/root/.qwen
       - cursor_data:/root/.local/share/cursor-agent
       - openai_state:/root/.config/openai
@@ -62,6 +63,7 @@ services:
 
       # Gemini / Qwen / Cursor / Codex（OpenAI）狀態
       - gemini_state:/root/.config/gemini
+      - gemini_home:/root/.gemini 
       - qwen_state:/root/.qwen
       - cursor_data:/root/.local/share/cursor-agent
       - cursor_config:/root/.config/cursor-agent
@@ -112,6 +114,7 @@ volumes:
   claude_projects: {}
   claude_sessions: {}
   gemini_state: {}
+  gemini_home: {}
   qwen_state: {}
   openai_state: {}
   cursor_config: {}

@@ -24,12 +24,12 @@ echo
 echo "== Ensuring writable state directories =="
 mkdir -p \
   /root/.claude/plugins /root/.claude/projects /root/.claude/sessions \
-  /root/.config/gemini /root/.config/openai /root/.config/cursor-agent \
+  /root/.gemini /root/.config/gemini /root/.config/openai /root/.config/cursor-agent \
   /root/.qwen /root/.local/share/cursor-agent || true
 
 ready=1
 for d in /root/.claude/plugins /root/.claude/projects /root/.claude/sessions \
-         /root/.config/gemini /root/.config/openai /root/.config/cursor-agent \
+         /root/.gemini /root/.config/gemini /root/.config/openai /root/.config/cursor-agent \
          /root/.qwen /root/.local/share/cursor-agent; do
   if [ -w "$d" ]; then
     echo "  [OK] $d writable"
@@ -54,12 +54,12 @@ else
   no "error running claude"; ready=0
 fi
 
-# Gemini：登入後 ~/.config/gemini 會有檔案（有時需跑兩次）
+# Gemini：登入後 ~/.gemini（或 ~/.config/gemini）會有內容
 echo -n "  [Gemini] "
-if [ -n "$(ls -A /root/.config/gemini 2>/dev/null || true)" ]; then
+if [ -n "$(ls -A /root/.gemini 2>/dev/null || true)" ] || [ -n "$(ls -A /root/.config/gemini 2>/dev/null || true)" ]; then
   ok "ready"
 else
-  warn "not logged in. Run: ${BLD}docker compose run --rm -it login gemini${NC}（若第一次只有選項，請再跑一次直到出現連結並貼授權碼）"
+  warn "not logged in. Run: ${BLD}docker compose run --rm -it login gemini${NC}（可能要跑兩次；狀態寫在 ${BLD}~/.gemini${NC}）"
   ready=0
 fi
 

@@ -61,7 +61,9 @@ RUN mkdir -p \
     /root/.config/gemini \
     /root/.config/openai \
     /root/.config/cursor-agent \
-    /root/.qwen
+    /root/.qwen 
+
+RUN mkdir -p /root/.gemini
 
 WORKDIR /srv/api
 COPY . /srv/api/
