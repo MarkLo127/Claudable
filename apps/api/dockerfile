@@ -1,4 +1,4 @@
-# apps/api/dockerfile  ← 注意：compose 指向的是小寫 "dockerfile"
+# apps/api/dockerfile
 FROM python:3.11-slim
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -13,41 +13,47 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       curl ca-certificates gnupg git unzip bash build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Python venv + 常用依賴（FastAPI/UVicorn/DB/加解密）
+# Python venv + 依賴
 RUN python -m venv /opt/venv \
  && pip install --upgrade pip setuptools wheel \
  && pip install fastapi "uvicorn[standard]" pydantic pydantic-settings \
                sqlalchemy alembic python-dotenv cryptography
 
-# Node 20 + pnpm（多數 CLI 走 npm）
+# Node 20 + pnpm
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
  && apt-get install -y --no-install-recommends nodejs \
  && npm i -g pnpm \
  && rm -rf /var/lib/apt/lists/*
 
-# 依你提供的安裝指令安裝各家 CLI
-# 失敗不終止（部分套件在特定架構/時間點可能暫不可用）
+# 依你提供的安裝指令安裝各家 CLI（失敗不終止）
 RUN npm install -g @anthropic-ai/claude-code       || true \
  && npm install -g @qwen-code/qwen-code@latest     || true \
  && npm install -g @google/gemini-cli              || true \
  && npm install -g @openai/codex                   || true
 
-# 安裝 cursor-agent（官方安裝器會把 binary 放到 ~/.local/bin）
-RUN bash -lc 'curl https://cursor.com/install -fsSL | bash' || true
+# 安裝 cursor-agent（容錯且建立穩定 symlink）
+RUN set -eux; \
+  curl https://cursor.com/install -fsSL | bash || true; \
+  export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"; \
+  if [ -x "$HOME/.local/bin/cursor-agent" ]; then \
+    ln -sf "$HOME/.local/bin/cursor-agent" /usr/local/bin/cursor-agent; \
+  elif [ -d "$HOME/.local/share/cursor-agent/versions" ]; then \
+    v=$(ls -1 "$HOME/.local/share/cursor-agent/versions" | sort -V | tail -1); \
+    ln -sf "$HOME/.local/share/cursor-agent/versions/$v/cursor-agent" /usr/local/bin/cursor-agent; \
+  fi
 
-# 把實際安裝到的可執行檔，映射成後端程式碼預期的命令名
-# （npm 全域 bin 通常在 /usr/local/bin）
-RUN set -eux; BIN="$(npm bin -g)"; \
-  [ -x "$BIN/claude-code" ]  && ln -sf "$BIN/claude-code"  /usr/local/bin/claude  || true; \
-  [ -x "$BIN/qwen-code" ]    && ln -sf "$BIN/qwen-code"    /usr/local/bin/qwen    || true; \
-  [ -x "$BIN/gemini" ]       && ln -sf "$BIN/gemini"       /usr/local/bin/gemini  || true; \
-  [ -x "$BIN/codex" ]        && ln -sf "$BIN/codex"        /usr/local/bin/codex   || true; \
-  # 其他可能的可執行檔別名（保險）
-  command -v google-gemini >/dev/null 2>&1 && ln -sf "$(command -v google-gemini)" /usr/local/bin/gemini || true; \
-  command -v dashscope     >/dev/null 2>&1 && ln -sf "$(command -v dashscope)"     /usr/local/bin/qwen   || true
+# ★ 用 command -v 掃描實際安裝到的 binary，再建立你後端程式碼期望的命令別名
+RUN set -eux; \
+  linkif() { src="$1"; dst="$2"; if command -v "$src" >/dev/null 2>&1; then ln -sf "$(command -v "$src")" "/usr/local/bin/$dst"; fi; }; \
+  linkif claude-code    claude; \
+  linkif qwen-code      qwen; \
+  linkif gemini         gemini; \
+  linkif google-gemini  gemini; \
+  linkif codex          codex; \
+  linkif dashscope      qwen; \
+  true
 
 WORKDIR /srv/api
-# build 時複製一次程式碼（執行時你的 volume 會蓋掉，沒關係）
 COPY . /srv/api/
 
 EXPOSE 8080
