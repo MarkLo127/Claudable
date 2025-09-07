@@ -142,7 +142,7 @@ if has_any_file "$HOME/.local/share/cursor-agent" || has_any_file "$HOME/.config
   echo "✅ Cursor Agent ready"
   CURSOR_READY=1
 else
-  echo "⚠️  Cursor Agent 未檢出登入（可在容器內執行：cursor-agent 或 cursor-agent login）"
+  echo "⚠️  Cursor Agent 未檢出登入（可在容器內執行：cursor-agent）"
 fi
 echo
 
