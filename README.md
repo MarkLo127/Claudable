@@ -1,3 +1,5 @@
+[繁體中文](./README_zh.md)
+
 # Claudable
 
 <img src="./assets/Claudable.png" alt="CLovable" style="border-radius: 12px; width: 100%;" />
