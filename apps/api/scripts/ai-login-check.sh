@@ -1,31 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 參數解析
-INTERACTIVE=1
-for arg in "$@"; do
-  case "$arg" in
-    --noninteractive|--check-only|-q)
-      INTERACTIVE=0
-      ;;
-  esac
-done
-# 若未明確要求互動但無 TTY，則退回非互動
-if [ "$INTERACTIVE" -eq 1 ] && { [ ! -t 0 ] || [ ! -t 1 ]; }; then
-  INTERACTIVE=0
-fi
-
 # 參數（可由環境變數覆寫）
 STRICT_CLAUDE="${STRICT_CLAUDE:-0}"
 STRICT_CODEX="${STRICT_CODEX:-0}"
 GEMINI_MAX_RUNS="${GEMINI_MAX_RUNS:-2}"
 
 echo "== AI Login Checker =="
-if [ "$INTERACTIVE" -eq 1 ]; then
-  echo "模式：互動（將嘗試開啟各 CLI）"
-else
-  echo "模式：非互動（僅檢查狀態檔，不開 CLI）"
-fi
 echo "流程：Claude → Gemini → Qwen → Codex → Cursor"
 echo
 
@@ -53,15 +34,10 @@ run_cli() {
   local title="$1"; shift
   local cmd="$*"
   echo "─── $title"
-  if [ "$INTERACTIVE" -eq 1 ]; then
-    echo "（結束請輸入 /exit 或 Ctrl+C；返回本檢查器會自動繼續）"
-    echo
-    bash -lc "$cmd" || true
-    echo
-  else
-    echo "（非互動模式：略過啟動 $cmd）"
-    echo
-  fi
+  echo "（結束請輸入 /exit 或 Ctrl+C；返回本檢查器會自動繼續）"
+  echo
+  bash -lc "$cmd" || true
+  echo
 }
 
 # 判定是否有狀態檔
@@ -175,3 +151,4 @@ MSG
 fi
 
 exit "$EXIT_CODE"
+

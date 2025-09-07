@@ -32,8 +32,8 @@ services:
       - cursor_config:/root/.config/cursor-agent
       - openai_state:/root/.config/openai
     working_dir: /srv/api
-    # ★ 非互動模式僅做檢查，避免 up -d 卡住；wizard 會覆蓋此命令改為互動
-    command: ["/bin/bash","-lc","/usr/local/bin/ai-login-check.sh --noninteractive"]
+    # ★ 直接呼叫映像內的檢查腳本（避免將本機檔案當目錄掛載）
+    command: ["/bin/bash","-lc","/usr/local/bin/ai-login-check.sh"]
 
   backend:
     container_name: claudable_backend
