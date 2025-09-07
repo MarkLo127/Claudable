@@ -1,11 +1,5 @@
-# docker-compose.yaml
-# 說明：
-# - login：互動登入前置檢查（Claude→Gemini→Qwen→Codex→Cursor）。全部就緒才放行 backend/frontend。
-# - backend：後端 API（在容器內用 bootstrap-cursor.sh 啟動 uvicorn）。
-# - frontend：Next.js 開發伺服器，將 pnpm 的 store/state 放在命名卷，避免把 .pnpm-store 推進 Git。
-# - 不要加 `version:` 欄位（Compose v2 已不需，避免警告）。
-
 services:
+  # 互動登入前置檢查
   login:
     container_name: claudable_login
     build:
@@ -17,32 +11,25 @@ services:
       HOME: /root
       XDG_CONFIG_HOME: /root/.config
       PATH: "/opt/venv/bin:/usr/local/bin:/usr/bin:/bin:/root/.local/bin"
-      # 可調整的檢查嚴格度／重試次數（必要時在執行時覆寫）
-      STRICT_CLAUDE: "0"    # 1=Claude 未檢出登入則阻擋；0=只警示
-      STRICT_CODEX: "0"     # 1=Codex 未登入阻擋；0=只警示
-      GEMINI_MAX_RUNS: "2"  # Gemini 自動重啟次數（處理首次提示 "Please restart"）
+      # 可調參數
+      STRICT_CLAUDE: "0"     # 1=Claude 未登入就 fail；0=僅警示
+      STRICT_CODEX: "0"      # 1=Codex 未登入就 fail；0=僅警示
+      GEMINI_MAX_RUNS: "2"   # Gemini 自動重啟顯示授權連結的次數
     volumes:
-      # 專案程式
+      # 專案程式（可寫，方便你在容器內看檔）
       - ./apps/api:/srv/api
-
-      # 登入檢查腳本（login 容器內執行）
-      - ./apps/api/scripts/ai-login-check.sh:/usr/local/bin/ai-login-check.sh:ro
-
-      # Claude 狀態（全部用命名卷，確保可寫，避免 EROFS）
+      # 各家 CLI 狀態卷（全部命名卷，避免 EROFS）
       - claude_plugins:/root/.claude/plugins
       - claude_projects:/root/.claude/projects
       - claude_sessions:/root/.claude/sessions
-
-      # Gemini 狀態（新版使用 ~/.gemini；亦保留 ~/.config/gemini）
       - gemini_state:/root/.config/gemini
       - gemini_home:/root/.gemini
-
-      # Qwen / Cursor / Codex（OpenAI）狀態
       - qwen_state:/root/.qwen
       - cursor_data:/root/.local/share/cursor-agent
       - cursor_config:/root/.config/cursor-agent
       - openai_state:/root/.config/openai
     working_dir: /srv/api
+    # ★ 直接呼叫容器內的腳本（不再 bind 檔案）
     command: ["/bin/bash","-lc","/usr/local/bin/ai-login-check.sh"]
 
   backend:
@@ -50,7 +37,6 @@ services:
     build:
       context: ./apps/api
       dockerfile: dockerfile
-    # 非 AI 機密建議放 .env（例如 ENCRYPTION_KEY、DB 等）
     env_file:
       - .env
     environment:
@@ -64,24 +50,17 @@ services:
       login:
         condition: service_completed_successfully
     volumes:
-      # 程式與資料
       - ./apps/api:/srv/api
       - ./data:/srv/data
-
-      # Claude 狀態（與 login 共用命名卷）
       - claude_plugins:/root/.claude/plugins
       - claude_projects:/root/.claude/projects
       - claude_sessions:/root/.claude/sessions
-
-      # Gemini / Qwen / Cursor / Codex（OpenAI）狀態
       - gemini_state:/root/.config/gemini
       - gemini_home:/root/.gemini
       - qwen_state:/root/.qwen
       - cursor_data:/root/.local/share/cursor-agent
       - cursor_config:/root/.config/cursor-agent
       - openai_state:/root/.config/openai
-
-      # 啟動腳本（容器內執行）
       - ./apps/api/bootstrap-cursor.sh:/usr/local/bin/bootstrap-cursor.sh:ro
     working_dir: /srv/api
     ports:
@@ -120,12 +99,9 @@ services:
       "
 
 volumes:
-  # 前端依賴快取
   web_node_modules: {}
   pnpm_store: {}
   pnpm_state: {}
-
-  # AI 狀態卷（可寫，避免 EROFS 與 host 權限差異）
   claude_plugins: {}
   claude_projects: {}
   claude_sessions: {}

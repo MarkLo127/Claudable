@@ -25,13 +25,13 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
  && npm i -g pnpm \
  && rm -rf /var/lib/apt/lists/*
 
-# 依你提供的安裝指令安裝各家 CLI（失敗不終止）
+# 安裝各家 CLI（失敗不終止）
 RUN npm install -g @anthropic-ai/claude-code       || true \
  && npm install -g @qwen-code/qwen-code@latest     || true \
  && npm install -g @google/gemini-cli              || true \
  && npm install -g @openai/codex                   || true
 
-# 安裝 cursor-agent（容錯且建立穩定 symlink）
+# 安裝 cursor-agent 並建立穩定 symlink
 RUN set -eux; \
   curl https://cursor.com/install -fsSL | bash || true; \
   export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"; \
@@ -42,7 +42,7 @@ RUN set -eux; \
     ln -sf "$HOME/.local/share/cursor-agent/versions/$v/cursor-agent" /usr/local/bin/cursor-agent; \
   fi
 
-# 用 command -v 掃描實際安裝到的 binary，建立命令別名
+# 建立常用別名
 RUN set -eux; \
   linkif() { src="$1"; dst="$2"; if command -v "$src" >/dev/null 2>&1; then ln -sf "$(command -v "$src")" "/usr/local/bin/$dst"; fi; }; \
   linkif claude-code    claude; \
@@ -53,7 +53,7 @@ RUN set -eux; \
   linkif dashscope      qwen; \
   true
 
-# ★ 預先建立掛載點（避免 volume 掛載時找不到 / 或父路徑唯讀造成的 EROFS）
+# 預先建立狀態目錄（避免 EROFS）
 RUN mkdir -p \
     /root/.claude/plugins \
     /root/.claude/projects \
@@ -61,12 +61,17 @@ RUN mkdir -p \
     /root/.config/gemini \
     /root/.config/openai \
     /root/.config/cursor-agent \
-    /root/.qwen 
+    /root/.qwen \
+    /root/.gemini \
+    /root/.local/share/cursor-agent
 
-RUN mkdir -p /root/.gemini
-
+# 先放入專案（含 scripts 目錄）
 WORKDIR /srv/api
 COPY . /srv/api/
+
+# ★ 把登入檢查腳本安裝到容器，並給執行權限（不要再用 bind-mount）
+COPY scripts/ai-login-check.sh /usr/local/bin/ai-login-check.sh
+RUN chmod +x /usr/local/bin/ai-login-check.sh
 
 EXPOSE 8080
 CMD ["uvicorn","app.main:app","--host","0.0.0.0","--port","8080"]
