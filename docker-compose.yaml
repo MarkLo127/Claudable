@@ -1,5 +1,7 @@
+# docker-compose.yaml
+
 services:
-  # 互動登入前置檢查
+  # 互動登入前置檢查：任何 AI 未就緒就 exit 1，阻擋 backend/frontend 啟動
   login:
     container_name: claudable_login
     build:
@@ -16,8 +18,9 @@ services:
       STRICT_CODEX: "0"      # 1=Codex 未登入就 fail；0=僅警示
       GEMINI_MAX_RUNS: "2"   # Gemini 自動重啟顯示授權連結的次數
     volumes:
-      # 專案程式（可寫，方便你在容器內看檔）
+      # 專案程式（可寫，方便在容器內瀏覽）
       - ./apps/api:/srv/api
+
       # 各家 CLI 狀態卷（全部命名卷，避免 EROFS）
       - claude_plugins:/root/.claude/plugins
       - claude_projects:/root/.claude/projects
@@ -29,7 +32,7 @@ services:
       - cursor_config:/root/.config/cursor-agent
       - openai_state:/root/.config/openai
     working_dir: /srv/api
-    # ★ 直接呼叫容器內的腳本（不再 bind 檔案）
+    # ★ 直接呼叫映像內的檢查腳本（避免將本機檔案當目錄掛載）
     command: ["/bin/bash","-lc","/usr/local/bin/ai-login-check.sh"]
 
   backend:
@@ -52,15 +55,21 @@ services:
     volumes:
       - ./apps/api:/srv/api
       - ./data:/srv/data
+
+      # Claude（命名卷可寫）
       - claude_plugins:/root/.claude/plugins
       - claude_projects:/root/.claude/projects
       - claude_sessions:/root/.claude/sessions
+
+      # Gemini / Qwen / Cursor / Codex（OpenAI）狀態（命名卷）
       - gemini_state:/root/.config/gemini
       - gemini_home:/root/.gemini
       - qwen_state:/root/.qwen
       - cursor_data:/root/.local/share/cursor-agent
       - cursor_config:/root/.config/cursor-agent
       - openai_state:/root/.config/openai
+
+      # 啟動腳本（若 Dockerfile 已 COPY 可移除）
       - ./apps/api/bootstrap-cursor.sh:/usr/local/bin/bootstrap-cursor.sh:ro
     working_dir: /srv/api
     ports:
