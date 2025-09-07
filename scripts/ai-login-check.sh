@@ -135,7 +135,7 @@ echo
 # Cursor Agent
 ################################
 # 只驗證是否可用與有本地狀態
-echo "─── Cursor Agent（若需要可執行：cursor-agent login）"
+run_cli "cursor-agent" "cursor-agent"
 cursor-agent --version >/dev/null 2>&1 || true
 CURSOR_READY=0
 if has_any_file "$HOME/.local/share/cursor-agent" || has_any_file "$HOME/.config/cursor-agent"; then
