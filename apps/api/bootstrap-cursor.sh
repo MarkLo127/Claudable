@@ -1,33 +1,15 @@
 #!/usr/bin/env bash
+# 保持 cursor-agent 在 PATH 中可用；不做登入，只是幫 backend 拉起來
 set -euo pipefail
 
-# 確保 PATH 有 venv & ~/.local/bin
-export PATH="/opt/venv/bin:/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+export PATH="$HOME/.local/bin:/usr/local/bin:/opt/venv/bin:$PATH"
 
-# 若 cursor-agent 尚未安裝到卷，安裝一次
-if ! ls -d /root/.local/share/cursor-agent/versions/* >/dev/null 2>&1; then
-  echo "[bootstrap] Installing cursor-agent ..."
-  curl -fsS https://cursor.com/install | bash
-fi
-
-# 建立 symlink
-mkdir -p /root/.local/bin
-latest_bin="$(ls -d /root/.local/share/cursor-agent/versions/*/cursor-agent 2>/dev/null | sort | tail -n1 || true)"
-if [ -n "${latest_bin}" ]; then
-  ln -sf "${latest_bin}" /root/.local/bin/cursor-agent
-  echo "[bootstrap] cursor-agent -> ${latest_bin}"
-else
-  echo "[bootstrap] WARN: cursor-agent binary not found"
-fi
-
-# 顯示可用 CLI（除錯用）
-for c in claude codex qwen gemini cursor-agent; do
-  if command -v "$c" >/dev/null 2>&1; then
-    echo "[bootstrap] $c: $( "$c" --version 2>&1 || true )"
-  else
-    echo "[bootstrap] $c: not found"
+# 若 cursor-agent 安裝在 versions 目錄，建立一次性 symlink
+if ! command -v cursor-agent >/dev/null 2>&1; then
+  if compgen -G "$HOME/.local/share/cursor-agent/versions/*/cursor-agent" >/dev/null; then
+    v=$(ls -1 "$HOME/.local/share/cursor-agent/versions" | sort -V | tail -1)
+    ln -sf "$HOME/.local/share/cursor-agent/versions/$v/cursor-agent" /usr/local/bin/cursor-agent || true
   fi
-done
+fi
 
-# 啟動 uvicorn
 exec "$@"

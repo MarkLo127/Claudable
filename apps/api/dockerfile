@@ -31,7 +31,7 @@ RUN npm install -g @anthropic-ai/claude-code       || true \
  && npm install -g @google/gemini-cli              || true \
  && npm install -g @openai/codex                   || true
 
-# 安裝 cursor-agent 並建立穩定 symlink
+# 安裝 cursor-agent（容錯且建立穩定 symlink）
 RUN set -eux; \
   curl https://cursor.com/install -fsSL | bash || true; \
   export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"; \
@@ -42,7 +42,7 @@ RUN set -eux; \
     ln -sf "$HOME/.local/share/cursor-agent/versions/$v/cursor-agent" /usr/local/bin/cursor-agent; \
   fi
 
-# 建立常用別名
+# 依實際安裝位置建立別名
 RUN set -eux; \
   linkif() { src="$1"; dst="$2"; if command -v "$src" >/dev/null 2>&1; then ln -sf "$(command -v "$src")" "/usr/local/bin/$dst"; fi; }; \
   linkif claude-code    claude; \
@@ -53,7 +53,7 @@ RUN set -eux; \
   linkif dashscope      qwen; \
   true
 
-# 預先建立狀態目錄（避免 EROFS）
+# 預先建立掛載點（避免 volume 掛載時找不到/或父路徑唯讀造成的 EROFS）
 RUN mkdir -p \
     /root/.claude/plugins \
     /root/.claude/projects \
@@ -65,11 +65,10 @@ RUN mkdir -p \
     /root/.gemini \
     /root/.local/share/cursor-agent
 
-# 先放入專案（含 scripts 目錄）
 WORKDIR /srv/api
 COPY . /srv/api/
 
-# ★ 把登入檢查腳本安裝到容器，並給執行權限（不要再用 bind-mount）
+# 把檢查腳本放進映像供 login 服務呼叫
 COPY scripts/ai-login-check.sh /usr/local/bin/ai-login-check.sh
 RUN chmod +x /usr/local/bin/ai-login-check.sh
 

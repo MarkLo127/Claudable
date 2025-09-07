@@ -1,154 +1,158 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 參數（可由環境變數覆寫）
-STRICT_CLAUDE="${STRICT_CLAUDE:-0}"
-STRICT_CODEX="${STRICT_CODEX:-0}"
-GEMINI_MAX_RUNS="${GEMINI_MAX_RUNS:-2}"
+# 顏色
+G='\033[0;32m'; Y='\033[1;33m'; R='\033[0;31m'; B='\033[1;34m'; Z='\033[0m'
 
-echo "== AI Login Checker =="
-echo "流程：Claude → Gemini → Qwen → Codex → Cursor"
-echo
+say() { echo -e "$@"; }
+ok()  { say "${G}$*${Z}"; }
+warn(){ say "${Y}$*${Z}"; }
+err() { say "${R}$*${Z}"; }
 
-# 準備可寫目錄
-for d in \
-  "$HOME/.claude/plugins" "$HOME/.claude/projects" "$HOME/.claude/sessions" \
-  "$HOME/.config/gemini" "$HOME/.gemini" "$HOME/.config/openai" \
-  "$HOME/.config/cursor-agent" "$HOME/.qwen" "$HOME/.local/share/cursor-agent"
-do
-  mkdir -p "$d"
-done
+HOME="${HOME:-/root}"
+XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 
-echo "== Checking CLIs in PATH =="
-for c in claude gemini qwen codex cursor-agent; do
-  if command -v "$c" >/dev/null 2>&1; then
-    echo "  [OK] $c -> $(command -v "$c")"
-  else
-    echo "  [MISS] $c"
-  fi
-done
-echo
+# 判斷是否在 TTY（非 TTY 時不要啟動互動 REPL）
+IS_TTY=0
+if [ -t 0 ] && [ -t 1 ]; then IS_TTY=1; fi
 
-# 小工具：執行一次 CLI（不阻斷）
-run_cli() {
-  local title="$1"; shift
-  local cmd="$*"
-  echo "─── $title"
-  echo "（結束請輸入 /exit 或 Ctrl+C；返回本檢查器會自動繼續）"
-  echo
-  bash -lc "$cmd" || true
-  echo
+# 檢查各 CLI 可執行檔
+have(){ command -v "$1" >/dev/null 2>&1; }
+
+ready_gemini() {
+  # 任何一處有檔案就視為已登入
+  if [ -d "$HOME/.gemini" ] && [ -n "$(ls -A "$HOME/.gemini" 2>/dev/null || true)" ]; then return 0; fi
+  if [ -d "$XDG_CONFIG_HOME/gemini" ] && [ -n "$(ls -A "$XDG_CONFIG_HOME/gemini" 2>/dev/null || true)" ]; then return 0; fi
+  return 1
 }
+ready_cursor() {
+  local d1="$HOME/.local/share/cursor-agent"
+  local d2="$XDG_CONFIG_HOME/cursor-agent"
+  if [ -d "$d1" ] && [ -n "$(ls -A "$d1" 2>/dev/null || true)" ]; then return 0; fi
+  if [ -d "$d2" ] && [ -n "$(ls -A "$d2" 2>/dev/null || true)" ]; then return 0; fi
+  return 1
+}
+ready_qwen() {
+  local d1="$HOME/.qwen"; local d2="$HOME/.dashscope"
+  if [ -d "$d1" ] && [ -n "$(ls -A "$d1" 2>/dev/null || true)" ]; then return 0; fi
+  if [ -d "$d2" ] && [ -n "$(ls -A "$d2" 2>/dev/null || true)" ]; then return 0; fi
+  return 1
+}
+# Claude/Codex 無「免金鑰」可驗證的登入狀態，僅顯示一次提示即略過
+ready_claude() { return 1; }
+ready_codex()  { return 1; }
 
-# 判定是否有狀態檔
-has_any_file() { find "$1" -type f -mindepth 1 -print -quit 2>/dev/null | grep -q .; }
-
-################################
-# Claude
-################################
-run_cli "Claude（只啟動一次）" "claude"
-CLAUDE_READY=0
-if has_any_file "$HOME/.claude/sessions" || has_any_file "$HOME/.claude/plugins"; then
-  echo "✅ Claude ready"
-  CLAUDE_READY=1
-else
-  echo "⚠️  Claude 未檢出登入（稍後總體檢查仍會列出指令）"
-fi
+say "${B}== AI Login Checker ==${Z}"
+say "流程：Claude → Gemini → Qwen → Codex → Cursor"
 echo
 
-################################
-# Gemini（常見需要跑兩次）
-################################
-GEMINI_READY=0
-for i in $(seq 1 "$GEMINI_MAX_RUNS"); do
-  run_cli "Gemini（第 $i 次）" "gemini"
-  if [ -s "$HOME/.gemini/credentials.json" ] \
-     || grep -q '"access_token"' "$HOME/.gemini/"* 2>/dev/null \
-     || has_any_file "$HOME/.config/gemini"; then
-    echo "✅ Gemini ready"
-    GEMINI_READY=1
-    break
-  fi
-  echo "… 尚未檢出 Gemini 登入，將再試一次"
-  sleep 1
+say "== Checking CLIs in PATH =="
+for c in claude gemini qwen codex cursor-agent; do
+  if have "$c"; then ok "  [OK] $c -> $(command -v $c)"; else err "  [MISS] $c"; fi
 done
-if [ "$GEMINI_READY" -eq 0 ]; then
-  echo "⚠️  Gemini 未檢出登入"
-fi
 echo
 
-################################
-# Qwen
-################################
-run_cli "Qwen" "qwen"
-QWEN_READY=0
-if has_any_file "$HOME/.qwen"; then
-  echo "✅ Qwen ready"
-  QWEN_READY=1
-else
-  echo "⚠️  Qwen 未檢出登入"
-fi
-echo
-
-################################
-# Codex（預設不強制）
-################################
-run_cli "Codex（OpenAI Codex）" "codex"
-CODEX_READY=1
-if [ "$STRICT_CODEX" = "1" ]; then
-  if has_any_file "$HOME/.config/openai"; then
-    echo "✅ Codex ready"
+# --- Claude（只啟動一次，純提示） ---
+if have claude; then
+  warn "─── Claude（只啟動一次；/exit 結束返回本檢查器）"
+  if [ "$IS_TTY" -eq 1 ]; then
+    claude || true
   else
-    echo "❌ Codex 未檢出登入（STRICT_CODEX=1）"
-    CODEX_READY=0
+    warn "（非互動模式，略過啟動）"
   fi
 else
-  echo "ℹ️  Codex 狀態不強制，僅顯示"
+  warn "（未安裝 claude，跳過）"
 fi
 echo
 
-################################
-# Cursor Agent
-################################
-# 只驗證是否可用與有本地狀態
-run_cli "cursor-agent" "cursor-agent"
-cursor-agent --version >/dev/null 2>&1 || true
-CURSOR_READY=0
-if has_any_file "$HOME/.local/share/cursor-agent" || has_any_file "$HOME/.config/cursor-agent"; then
-  echo "✅ Cursor Agent ready"
-  CURSOR_READY=1
+# --- Gemini：最多自動重試 2 次以出現授權連結 ---
+if have gemini; then
+  if ready_gemini; then
+    ok "─── Gemini 已就緒"
+  else
+    warn "─── Gemini（會自動嘗試啟動最多兩次以顯示授權流程）"
+    if [ "$IS_TTY" -eq 1 ]; then
+      gemini || true
+      if ! ready_gemini; then gemini || true; fi
+    else
+      warn "（非互動模式，略過啟動）"
+    fi
+    if ready_gemini; then ok "Gemini 登入完成"; else warn "Gemini 尚未檢出登入"; fi
+  fi
 else
-  echo "⚠️  Cursor Agent 未檢出登入（可在容器內執行：cursor-agent）"
+  warn "（未安裝 gemini，跳過）"
 fi
 echo
 
-################################
-# 總結與退出碼
-################################
-echo "== 最終檢查 =="
-echo "  Claude: $([ "$CLAUDE_READY" -eq 1 ] && echo READY || echo NOT-READY)"
-echo "  Gemini: $([ "$GEMINI_READY" -eq 1 ] && echo READY || echo NOT-READY)"
-echo "  Qwen:   $([ "$QWEN_READY"   -eq 1 ] && echo READY || echo NOT-READY)"
-echo "  Codex:  $([ "$CODEX_READY"  -eq 1 ] && echo READY || echo NOT-READY)"
-echo "  Cursor: $([ "$CURSOR_READY" -eq 1 ] && echo READY || echo NOT-READY)"
-echo
-
-EXIT_CODE=0
-if [ "$STRICT_CLAUDE" = "1" ] && [ "$CLAUDE_READY" -eq 0 ]; then EXIT_CODE=1; fi
-if [ "$STRICT_CODEX"  = "1" ] && [ "$CODEX_READY"  -eq 0 ]; then EXIT_CODE=1; fi
-
-if [ "$EXIT_CODE" -eq 0 ]; then
-  echo "✅ 所需代理已就緒或未強制。你可以啟動 backend/frontend。"
+# --- Qwen：開啟 CLI 一次，讓它跑自己的登入流程 ---
+if have qwen; then
+  if ready_qwen; then
+    ok "─── Qwen 已就緒"
+  else
+    warn "─── Qwen（開啟一次 CLI；完成後 /quit）"
+    if [ "$IS_TTY" -eq 1 ]; then qwen || true; else warn "（非互動模式，略過啟動）"; fi
+    if ready_qwen; then ok "Qwen 登入完成"; else warn "Qwen 尚未檢出登入"; fi
+  fi
 else
-  cat <<'MSG'
-❌ 仍有未就緒代理。請依下列指令在互動 TTY 內完成後再重試：
-  - Claude：docker compose run --rm -it login claude   # REPL 內 /login 完成後 /exit
-  - Gemini：docker compose run --rm -it login gemini   # 直到出現授權連結並完成貼碼
-  - Qwen：  docker compose run --rm -it login qwen
-  - Codex： docker compose run --rm -it login codex
-  - Cursor：docker compose run --rm -it login cursor-agent
-MSG
+  warn "（未安裝 qwen，跳過）"
+fi
+echo
+
+# --- Codex：提示即可（你目前不強制） ---
+if have codex; then
+  warn "─── Codex（僅提示，可在 REPL 內 /quit；未強制）"
+  if [ "$IS_TTY" -eq 1 ]; then codex || true; fi
+else
+  warn "（未安裝 codex，跳過）"
+fi
+echo
+
+# --- Cursor Agent：若未就緒就呼叫一次 login ---
+if have cursor-agent; then
+  if ready_cursor; then
+    ok "─── Cursor Agent 已就緒"
+  else
+    warn "─── Cursor Agent（會執行一次 login）"
+    if [ "$IS_TTY" -eq 1 ]; then cursor-agent login || cursor-agent || true; else warn "（非互動模式，略過啟動）"; fi
+    if ready_cursor; then ok "Cursor Agent 登入完成"; else warn "Cursor Agent 尚未檢出登入"; fi
+  fi
+else
+  warn "（未安裝 cursor-agent，跳過）"
+fi
+echo
+
+say "== 最終檢查 =="
+ok  "  狀態目錄可寫："
+for d in \
+  "$HOME/.claude/plugins" \
+  "$HOME/.claude/projects" \
+  "$HOME/.claude/sessions" \
+  "$HOME/.gemini" \
+  "$XDG_CONFIG_HOME/gemini" \
+  "$XDG_CONFIG_HOME/openai" \
+  "$XDG_CONFIG_HOME/cursor-agent" \
+  "$HOME/.qwen" \
+  "$HOME/.local/share/cursor-agent"
+do
+  mkdir -p "$d" 2>/dev/null || true
+  if [ -w "$d" ]; then ok "    [OK] $d"; else warn "    [RO] $d"; fi
+done
+echo
+
+READY_MSGS=()
+[ "$(ready_gemini;  echo $?)" = "0" ] && READY_MSGS+=("Gemini")
+[ "$(ready_qwen;   echo $?)" = "0" ] && READY_MSGS+=("Qwen")
+[ "$(ready_cursor; echo $?)" = "0" ] && READY_MSGS+=("Cursor")
+
+if [ "${#READY_MSGS[@]}" -gt 0 ]; then
+  ok "就緒：${READY_MSGS[*]}"
+else
+  warn "尚未檢出任何互動登入完成（Claude/Codex 不強制）。"
 fi
 
-exit "$EXIT_CODE"
+# 只要不是在互動 TTY（例如被誤啟動於 up -d）就直接退出 0，避免卡住
+if [ "$IS_TTY" -eq 0 ]; then
+  ok "非互動模式：僅檢查並退出。"
+fi
 
+exit 0

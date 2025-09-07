@@ -1,38 +1,35 @@
-# docker-compose.yaml
-
 services:
-  # 互動登入前置檢查：任何 AI 未就緒就 exit 1，阻擋 backend/frontend 啟動
+  # 互動登入：只在 --profile auth 時才會啟動
   login:
     container_name: claudable_login
+    profiles: ["auth"]
     build:
       context: ./apps/api
       dockerfile: dockerfile
-    stdin_open: true
-    tty: true
     environment:
       HOME: /root
       XDG_CONFIG_HOME: /root/.config
       PATH: "/opt/venv/bin:/usr/local/bin:/usr/bin:/bin:/root/.local/bin"
-      # 可調參數
-      STRICT_CLAUDE: "0"     # 1=Claude 未登入就 fail；0=僅警示
-      STRICT_CODEX: "0"      # 1=Codex 未登入就 fail；0=僅警示
-      GEMINI_MAX_RUNS: "2"   # Gemini 自動重啟顯示授權連結的次數
+    stdin_open: true
+    tty: true
     volumes:
-      # 專案程式（可寫，方便在容器內瀏覽）
       - ./apps/api:/srv/api
 
-      # 各家 CLI 狀態卷（全部命名卷，避免 EROFS）
+      # Claude 狀態（皆為可寫 named volumes）
       - claude_plugins:/root/.claude/plugins
       - claude_projects:/root/.claude/projects
       - claude_sessions:/root/.claude/sessions
-      - gemini_state:/root/.config/gemini
+
+      # Gemini / Qwen / Cursor / Codex（OpenAI）狀態（可寫）
       - gemini_home:/root/.gemini
+      - gemini_state:/root/.config/gemini
       - qwen_state:/root/.qwen
       - cursor_data:/root/.local/share/cursor-agent
       - cursor_config:/root/.config/cursor-agent
       - openai_state:/root/.config/openai
+
     working_dir: /srv/api
-    # ★ 直接呼叫映像內的檢查腳本（避免將本機檔案當目錄掛載）
+    # 這個腳本只做「檢查＋必要時啟動互動登入」，若都已就緒會直接退出 0
     command: ["/bin/bash","-lc","/usr/local/bin/ai-login-check.sh"]
 
   backend:
@@ -40,6 +37,8 @@ services:
     build:
       context: ./apps/api
       dockerfile: dockerfile
+    ports:
+      - "4090:8080"
     env_file:
       - .env
     environment:
@@ -49,31 +48,29 @@ services:
       PROJECTS_ROOT: /srv/data/projects
       PROJECTS_ROOT_HOST: /srv/data/projects
       PATH: "/opt/venv/bin:/usr/local/bin:/usr/bin:/bin:/root/.local/bin"
-    depends_on:
-      login:
-        condition: service_completed_successfully
+
+    # 注意：不再依賴 login（因為 login 只在 profile: auth 時會被啟動）
     volumes:
       - ./apps/api:/srv/api
       - ./data:/srv/data
 
-      # Claude（命名卷可寫）
+      # Claude（全部用 named volumes，避免 EROFS）
       - claude_plugins:/root/.claude/plugins
       - claude_projects:/root/.claude/projects
       - claude_sessions:/root/.claude/sessions
 
-      # Gemini / Qwen / Cursor / Codex（OpenAI）狀態（命名卷）
-      - gemini_state:/root/.config/gemini
+      # Gemini / Qwen / Cursor / Codex（OpenAI）狀態
       - gemini_home:/root/.gemini
+      - gemini_state:/root/.config/gemini
       - qwen_state:/root/.qwen
       - cursor_data:/root/.local/share/cursor-agent
       - cursor_config:/root/.config/cursor-agent
       - openai_state:/root/.config/openai
 
-      # 啟動腳本（若 Dockerfile 已 COPY 可移除）
+      # 啟動輔助腳本（若已 COPY 進 image 可改為不掛載）
       - ./apps/api/bootstrap-cursor.sh:/usr/local/bin/bootstrap-cursor.sh:ro
+
     working_dir: /srv/api
-    ports:
-      - "4090:8080"
     command: ["/bin/bash","-lc","/usr/local/bin/bootstrap-cursor.sh uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload"]
 
   frontend:
@@ -81,6 +78,8 @@ services:
     build:
       context: ./apps/web
       dockerfile: dockerfile
+    ports:
+      - "5090:3000"
     environment:
       NODE_ENV: development
       NEXT_PUBLIC_API_URL: http://localhost:4090
@@ -90,14 +89,12 @@ services:
     depends_on:
       backend:
         condition: service_started
-    working_dir: /app
     volumes:
       - ./apps/web:/app
       - web_node_modules:/app/node_modules
       - pnpm_store:/pnpm-store
       - pnpm_state:/pnpm-state
-    ports:
-      - "5090:3000"
+    working_dir: /app
     command: >
       bash -lc "
         corepack enable &&
@@ -111,12 +108,14 @@ volumes:
   web_node_modules: {}
   pnpm_store: {}
   pnpm_state: {}
+
+  # 狀態持久化
+  cursor_data: {}
+  cursor_config: {}
   claude_plugins: {}
   claude_projects: {}
   claude_sessions: {}
-  gemini_state: {}
   gemini_home: {}
+  gemini_state: {}
   qwen_state: {}
-  cursor_data: {}
-  cursor_config: {}
   openai_state: {}
